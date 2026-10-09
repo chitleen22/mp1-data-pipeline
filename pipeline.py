@@ -7,6 +7,7 @@ Usage:
     python pipeline.py --input data.csv --output results.json --format json --verbose
 """
 from data_loaders import load_data
+from data_processor import process_data, create_cleaning_report
 import argparse
 import logging
 import sys
@@ -20,7 +21,7 @@ def setup_logging(verbose=False):
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
-        format="%(asctime)s %(levelname)s %(message)s",
+        format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
         datefmt="%H:%M:%S"
     )
 
@@ -32,10 +33,10 @@ def parse_arguments():
                         help="Path to input file")
     parser.add_argument("--output", "-o", required=True,
                         help="Path to output file")
-    parser.add_argument(
-        "--format", choices=["csv", "json"], default="csv", help="Output format")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Enable verbose logging")
+    parser.add_argument("--config", required=True,
+                        help="Path to config YAML file")
     return parser.parse_args()
 
 
@@ -54,14 +55,34 @@ def main():
     args = parse_arguments()
     setup_logging(args.verbose)
     logger.debug(
-        f"Arguments parsed: input={args.input}, output={args.output}, format={args.format}")
+        f"Arguments parsed: input={args.input}, output={args.output}, config={args.config}")
 
     if not validate_input(args.input):
         sys.exit(1)
+
+    if not validate_input(args.config):
+        sys.exit(1)
+
     try:
         data = load_data(args.input)
+        config = load_data(args.config)
     except ValueError:
         sys.exit(1)
+
+    original_data = data.copy()
+
+    try:
+        processed_data = process_data(data, config)
+    except ValueError:
+        sys.exit(1)
+
+    report = create_cleaning_report(original_data, processed_data)
+    print(report)
+    logger.info(
+        f"Processing complete: {report['rows_before']} → {report['rows_after']} rows")
+
+    processed_data.to_csv(args.output, index=False)
+    logger.info(f"Saved cleaned data to {args.output}")
 
 
 if __name__ == "__main__":
